@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+<div class="container">
+    <h2><i class="fas fa-user-shield"></i> Admin Dashboard</h2>
+    
+    <div class="stats-container" id="stats">
+        <!-- Stats will be loaded here -->
+    </div>
+    
+    <div class="section">
+        <h3><i class="fas fa-users"></i> Vendor Management</h3>
+        <button id="view-vendors-btn" onclick="toggleVendors()">
+            <i class="fas fa-eye"></i> View All Vendors
+        </button>
+        <div id="vendorsSection" class="section-container">
+            <ul id="vendors"></ul>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h3><i class="fas fa-money-bill-wave"></i> Financial Management</h3>
+        <button id="view-financial-btn" onclick="toggleFinancialSummary()">
+            <i class="fas fa-chart-line"></i> View Financial Summary
+        </button>
+        <button id="view-orders-btn" onclick="toggleAllOrders()">
+            <i class="fas fa-receipt"></i> View All Orders
+        </button>
+        
+        <!-- Financial Stats -->
+        <div id="financialStats" class="section-container">
+            <h4><i class="fas fa-chart-pie"></i> Financial Overview</h4>
+            <div class="stats-container" id="financialStatsContent"></div>
+        </div>
+        
+        <!-- Orders List -->
+        <div id="ordersListContainer" class="section-container">
+            <h4><i class="fas fa-shopping-cart"></i> All Orders</h4>
+            <ul id="ordersList"></ul>
+        </div>
+    </div>
+    
+    <!-- Vendor Products Modal -->
+    <div id="vendorProductsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="vendorProductsTitle"></h3>
+                <button class="close-modal" onclick="closeModal()" title="Close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <ul id="vendorProductsList"></ul>
+        </div>
+    </div>
+    
+    <div class="back-section">
+        <a href="/" class="back-btn">
+            <i class="fas fa-sign-out-alt"></i> Back to Login
+        </a>
+    </div>
+</div>
+
+<script>
+// Load statistics
+function loadStats() {
+    fetch('/admin/vendors')
+        .then(res => res.json())
+        .then(vendors => {
+            const approvedVendors = vendors.filter(v => v.approved).length;
+            const totalProducts = vendors.reduce((sum, v) => sum + v.product_count, 0);
+            
+            const stats = `
+                <div class="stat-card">
+                    <h3>Total Vendors</h3>
+                    <div class="stat-number">${vendors.length}</div>
+                    <small>${approvedVendors} approved</small>
+                </div>
+                <div class="stat-card">
+                    <h3>Total Products</h3>
+                    <div class="stat-number">${totalProducts}</div>
+                    <small>from all vendors</small>
+                </div>
+                <div class="stat-card">
+                    <h3>Actions Today</h3>
+                    <div class="stat-number" id="actionCount">0</div>
+                    <small>approvals/deletions</small>
+                </div>
+            `;
+            document.getElementById('stats').innerHTML = stats;
+        });
+}
+
+// Track admin actions
+let actionCount = 0;
+function trackAction() {
+    actionCount++;
+    document.getElementById('actionCount').innerText = actionCount;
+}
+
+// Toggle functions
+let vendorsVisible = false;
+let financialSummaryVisible = false;
+let ordersListVisible = false;
+
+function toggleVendors() {
+    const container = document.getElementById('vendorsSection');
+    
+    if (!vendorsVisible) {
+        fetch('/admin/vendors')
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('vendors').innerHTML =
+                    data.map(v => `
+                        <li>
+                            <div>
+                                <strong>${v.name}</strong><br>
+                                <span>ID: ${v.id} | Products: ${v.product_count}</span><br>
+                                <span class="status-badge ${v.approved ? 'status-approved' : 'status-pending'}">
+                                    ${v.approved ? 'Approved ✓' : 'Pending Approval'}
+                                </span>
+                            </div>
+                            <div class="button-group">
+                                <button class="view-products-btn" onclick="showVendorProducts(${v.id}, '${v.name}')">
+                                    <i class="fas fa-boxes"></i> View Products (${v.product_count})
+                                </button>
+                                ${!v.approved ? 
+                                    `<button class="approve-btn" onclick="approveVendor(${v.id})">
+                                        <i class="fas fa-check"></i> Approve Vendor
+                                    </button>` : 
+                                    `<button class="unapprove-btn" onclick="unapproveVendor(${v.id})">
+                                        <i class="fas fa-times"></i> Unapprove Vendor
+                                    </button>`
+                                }
+                                <button class="delete-btn" onclick="deleteVendor(${v.id}, '${v.name}')">
+                                    <i class="fas fa-trash"></i> Delete Vendor
+                                </button>
+                            </div>
+                        </li>
+                    `).join('');
+                container.style.display = 'block';
+                vendorsVisible = true;
+            });
+    } else {
+        container.style.display = 'none';
+        vendorsVisible = false;
+    }
+}
+
+function toggleFinancialSummary() {
+    const container = document.getElementById('financialStats');
+    
+    if (!financialSummaryVisible) {
+        fetch('/admin/financial_summary')
+            .then(res => res.json())
+            .then(data => {
+                // DEBUG: Check what data is returned
+                console.log('Financial Summary Data:', data);
+                
+                // Format numbers with commas
+                const formatCurrency = (amount) => {
+                    return '₹' + parseInt(amount || 0).toLocaleString('en-IN');
+                };
+                
+                document.getElementById('financialStatsContent').innerHTML = `
+                    <div class="stat-card financial-sales">
+                        <h3>Total Sales</h3>
+                        <div class="stat-number">${formatCurrency(data.total_sales)}</div>
+                        <small>Revenue from ${data.total_orders || 0} orders</small>
+                    </div>
+                    <div class="stat-card financial-commission">
+                        <h3>Commission Earned</h3>
+                        <div class="stat-number">${formatCurrency(data.total_commission)}</div>
+                        <small>10% of total sales</small>
+                    </div>
+                    <div class="stat-card financial-pending">
+                        <h3>Pending Settlements</h3>
+                        <div class="stat-number">${formatCurrency(data.pending_settlements)}</div>
+                        <small>${data.pending_orders_count || 0} unpaid orders</small>
+                    </div>
+                    <div class="stat-card financial-paid">
+                        <h3>Paid to Vendors</h3>
+                        <div class="stat-number">${formatCurrency(data.paid_settlements)}</div>
+                        <small>${data.paid_orders_count || 0} settled orders</small>
+                    </div>
+                `;
+                container.style.display = 'block';
+                financialSummaryVisible = true;
+            })
+            .catch(error => {
+                console.error('Error loading financial summary:', error);
+                alert('Error loading financial data. Check console for details.');
+            });
+    } else {
+        container.style.display = 'none';
+        financialSummaryVisible = false;
+    }
+}
+
+function toggleAllOrders() {
+    const container = document.getElementById('ordersListContainer');
+    
+    if (!ordersListVisible) {
+        fetch('/admin/orders')
+            .then(res => res.json())
+            .then(orders => {
+                if (orders.length === 0) {
+                    document.getElementById('ordersList').innerHTML = `
+                        <li class="empty-state">
+                            <i class="fas fa-receipt"></i>
+                            <span>No orders found</span>
+                        </li>
+                    `;
+                } else {
+                    // Calculate totals directly from orders data
+                    const totalSales = orders.reduce((sum, o) => sum + (parseInt(o.price) || 0), 0);
+                    const totalCommission = orders.reduce((sum, o) => sum + (parseInt(o.commission) || 0), 0);
+                    const pendingOrders = orders.filter(o => o.settlement_status === 'pending');
+                    
+                    let ordersHTML = orders.map(o => `
+                        <li>
+                            <div>
+                                <strong>${o.product_name}</strong><br>
+                                <span>Order #${o.id} | Date: ${o.order_date || 'N/A'}</span><br>
+                                <span>Vendor: ${o.vendor_name || 'Unknown'}</span><br>
+                                <span>Price: ₹${o.price} | Commission: ₹${o.commission} | Vendor Earnings: ₹${o.vendor_earnings}</span><br>
+                                <span class="status-badge ${o.settlement_status === 'paid' ? 'status-paid' : 'status-pending'}">
+                                    ${o.settlement_status === 'paid' ? 'Paid ✓' : 'Pending Payment'}
+                                </span>
+                            </div>
+                            ${o.settlement_status === 'pending' ? 
+                                `<button class="mark-paid-btn" onclick="markAsPaid(${o.id})">
+                                    <i class="fas fa-money-check-alt"></i> Mark as Paid
+                                </button>` : 
+                                `<span class="settled-text"><i class="fas fa-check-circle"></i> Settled</span>`
+                            }
+                        </li>
+                    `).join('');
+                    
+                    document.getElementById('ordersList').innerHTML = ordersHTML;
+                }
+                container.style.display = 'block';
+                ordersListVisible = true;
+            })
+            .catch(error => {
+                console.error('Error loading orders:', error);
+                alert('Error loading orders data');
+            });
+    } else {
+        container.style.display = 'none';
+        ordersListVisible = false;
+    }
+}
+
+function markAsPaid(orderId) {
+    if (!confirm('Mark this order as paid to vendor?')) return;
+    
+    fetch(`/admin/settle/${orderId}`, {method: 'POST'})
+        .then(res => {
+            if (!res.ok) throw new Error('Failed to mark as paid');
+            return res.json();
+        })
+        .then(data => {
+            alert('✅ Payment marked as completed!');
+            // Refresh the visible sections
+            if (financialSummaryVisible) {
+                // Close and reopen to refresh
+                toggleFinancialSummary();
+                setTimeout(() => toggleFinancialSummary(), 300);
+            }
+            if (ordersListVisible) {
+                // Close and reopen to refresh
+                toggleAllOrders();
+                setTimeout(() => toggleAllOrders(), 300);
+            }
+            trackAction();
+        })
+        .catch(error => {
+            alert('❌ Error: ' + error.message);
+        });
+}
+
+// Modal functions
+function showVendorProducts(vendorId, vendorName) {
+    fetch(`/admin/vendors/${vendorId}/products`)
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById('vendorProductsTitle').innerHTML = 
+                `<i class="fas fa-store"></i> ${vendorName} - Products`;
+            
+            const productsList = document.getElementById('vendorProductsList');
+            if (data.products.length === 0) {
+                productsList.innerHTML = '<li class="empty-state">No products found for this vendor.</li>';
+            } else {
+                productsList.innerHTML = data.products.map(p => `
+                    <li>
+                        <div>
+                            <strong>${p.name}</strong><br>
+                            <span>Price: ₹${p.price}</span><br>
+                            <span class="status-badge status-approved">
+                                Available for Sale ✓
+                            </span>
+                        </div>
+                        <div class="button-group">
+                            <button class="delete-btn" onclick="adminDeleteProduct(${p.id}, '${p.name}')">
+                                <i class="fas fa-trash"></i> Delete Product
+                            </button>
+                        </div>
+                    </li>
+                `).join('');
+            }
+            
+            document.getElementById('vendorProductsModal').style.display = 'flex';
+        });
+}
+
+function closeModal() {
+    document.getElementById('vendorProductsModal').style.display = 'none';
+}
+
+function approveVendor(id) {
+    if (!confirm('Are you sure you want to approve this vendor?')) return;
+    
+    fetch(`/admin/approve_vendor/${id}`, {method: 'POST'})
+        .then(() => {
+            trackAction();
+            if (vendorsVisible) {
+                // Refresh vendors list if visible
+                toggleVendors();
+                setTimeout(() => toggleVendors(), 100);
+            }
+            loadStats();
+            alert('Vendor approved successfully!');
+        });
+}
+
+function unapproveVendor(id) {
+    if (!confirm('Are you sure you want to unapprove this vendor? Their products will be hidden from customers.')) return;
+    
+    fetch(`/admin/unapprove_vendor/${id}`, {method: 'POST'})
+        .then(() => {
+            trackAction();
+            if (vendorsVisible) {
+                // Refresh vendors list if visible
+                toggleVendors();
+                setTimeout(() => toggleVendors(), 100);
+            }
+            loadStats();
+            alert('Vendor unapproved successfully!');
+        });
+}
+
+function deleteVendor(id, name) {
+    if (!confirm(`WARNING: This will permanently delete vendor "${name}" and ALL their products!\n\nThis action cannot be undone. Are you sure?`)) return;
+    
+    fetch(`/admin/delete_vendor/${id}`, {method: 'DELETE'})
+        .then(res => res.json())
+        .then(data => {
+            trackAction();
+            if (vendorsVisible) {
+                // Refresh vendors list if visible
+                toggleVendors();
+                setTimeout(() => toggleVendors(), 100);
+            }
+            loadStats();
+            alert(data.message);
+        });
+}
+
+// Product deletion function for admin
+function adminDeleteProduct(id, name = '') {
+    if (!confirm(`Are you sure you want to delete this product?${name ? `\n\nProduct: ${name}` : ''}`)) return;
+    
+    fetch(`/vendor/delete_product/${id}`, {method: 'DELETE'})
+        .then(res => res.json())
+        .then(data => {
+            trackAction();
+            alert(data.message);
+            // Refresh the modal if open
+            if (document.getElementById('vendorProductsModal').style.display === 'flex') {
+                const vendorName = document.getElementById('vendorProductsTitle').textContent.split(' - ')[0];
+                const vendorId = Array.from(document.querySelectorAll('.view-products-btn'))
+                    .find(btn => btn.textContent.includes(vendorName))?.onclick
+                    .toString().match(/showVendorProducts\((\d+)/)?.[1];
+                if (vendorId) showVendorProducts(vendorId, vendorName);
+            }
+            loadStats();
+            if (vendorsVisible) {
+                // Refresh vendors list if visible
+                toggleVendors();
+                setTimeout(() => toggleVendors(), 100);
+            }
+        });
+}
+
+// Initial load
+loadStats();
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    const modal = document.getElementById('vendorProductsModal');
+    if (event.target === modal) {
+        closeModal();
+    }
+}
+
+// Close modal with Escape key
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        closeModal();
+    }
+});
+</script>
+</body>
+</html>

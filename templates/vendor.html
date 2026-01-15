@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Vendor Portal</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+<div class="container">
+    <h2><i class="fas fa-user-tie"></i> Vendor Portal</h2>
+    
+    <!-- Vendor Status Section (Hidden by default) -->
+    <div class="stats-container" id="vendorStats"></div>
+    
+    <div id="mainSections">
+        <!-- Register New Vendor Section (Left Side) -->
+        <div id="registerSection">
+            <h3><i class="fas fa-user-plus"></i> Register New Vendor</h3>
+            <input id="vendorName" placeholder="Enter vendor company name">
+            <button onclick="registerVendor()">
+                <i class="fas fa-paper-plane"></i> Submit Registration
+            </button>
+            <div id="registrationStatus" class="status-message"></div>
+        </div>
+        
+        <!-- Check Vendor Status Section (Right Side) -->
+        <div id="statusSection">
+            <h3><i class="fas fa-user-check"></i> Check Vendor Status</h3>
+            <input id="vendorId" placeholder="Enter your Vendor ID" type="number">
+            <button onclick="checkVendorStatus()">
+                <i class="fas fa-search"></i> Check Status & Load Products
+            </button>
+            <div id="vendorStatusMessage" class="status-message"></div>
+            
+            <!-- Product Form (Initially hidden) -->
+            <div id="productFormSection" class="product-form-section">
+                <h4><i class="fas fa-plus-circle"></i> Add New Product</h4>
+                <input id="productName" placeholder="Product name">
+                <input id="price" placeholder="Price in ₹" type="number">
+                <button onclick="addProduct()">
+                    <i class="fas fa-save"></i> Add Product
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Earnings Section -->
+    <div id="earningsSection" class="earnings-section">
+        <h3><i class="fas fa-chart-bar"></i> My Earnings</h3>
+        <button class="refresh-btn" onclick="loadMyEarnings()">
+            <i class="fas fa-sync-alt"></i> Refresh Earnings
+        </button>
+        
+        <div id="earningsStats" class="stats-container"></div>
+        
+        <h4>Order History</h4>
+        <ul id="earningsHistory"></ul>
+    </div>
+    
+    <!-- Product List (Hidden by default) -->
+    <div id="productListSection" class="product-list-section">
+        <h3><i class="fas fa-boxes"></i> My Products</h3>
+        <ul id="products"></ul>
+    </div>
+    
+    <!-- Button Section -->
+    <div id="buttonSection" class="button-section">
+        <div id="initialButtons" class="button-row">
+            <a href="/" class="back-btn">
+                <i class="fas fa-sign-out-alt"></i> Back to Login
+            </a>
+        </div>
+        
+        <div id="afterCheckButtons" class="button-row">
+            <button onclick="resetVendorPage()" class="reset-btn">
+                <i class="fas fa-redo"></i> Reset Page
+            </button>
+            <a href="/" class="back-btn">
+                <i class="fas fa-sign-out-alt"></i> Back to Login
+            </a>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentVendorId = null;
+let currentVendorName = null;
+let currentVendorApproved = false;
+
+// Show/Hide sections
+function showVendorSections() {
+    document.getElementById('vendorStats').style.display = 'grid';
+    document.getElementById('productListSection').style.display = 'block';
+    document.getElementById('earningsSection').style.display = 'block';
+}
+
+function hideVendorSections() {
+    document.getElementById('vendorStats').style.display = 'none';
+    document.getElementById('productListSection').style.display = 'none';
+    document.getElementById('productFormSection').style.display = 'none';
+    document.getElementById('earningsSection').style.display = 'none';
+}
+
+// Hide registration section when vendor checks status
+function hideRegistrationSection() {
+    document.getElementById('registerSection').classList.add('hidden');
+    document.getElementById('mainSections').classList.add('single-column');
+}
+
+// Show registration section (for resetting)
+function showRegistrationSection() {
+    document.getElementById('registerSection').classList.remove('hidden');
+    document.getElementById('mainSections').classList.remove('single-column');
+}
+
+// Toggle button visibility
+function showInitialButtons() {
+    document.getElementById('initialButtons').style.display = 'flex';
+    document.getElementById('afterCheckButtons').style.display = 'none';
+}
+
+function showAfterCheckButtons() {
+    document.getElementById('initialButtons').style.display = 'none';
+    document.getElementById('afterCheckButtons').style.display = 'flex';
+}
+
+// Load vendor stats and products
+function loadVendorStats(vendorId, vendorName, isApproved) {
+    hideRegistrationSection();
+    showVendorSections();
+    showAfterCheckButtons();
+    
+    // First show basic stats
+    document.getElementById('vendorStats').innerHTML = `
+        <div class="stat-card vendor-info">
+            <h3>Vendor Name</h3>
+            <div class="stat-number vendor-name-large">${vendorName}</div>
+        </div>
+        <div class="stat-card vendor-status">
+            <h3>Status</h3>
+            <div class="stat-number ${isApproved ? 'status-approved-color' : 'status-pending-color'}">
+                ${isApproved ? 'Approved ✓' : 'Pending'}
+            </div>
+        </div>
+        <div class="stat-card vendor-id">
+            <h3>Vendor ID</h3>
+            <div class="stat-number">${vendorId}</div>
+        </div>
+    `;
+    
+    // Show/Hide product form based on approval status
+    if (isApproved) {
+        document.getElementById('productFormSection').style.display = 'block';
+        document.getElementById('vendorStatusMessage').innerHTML = `
+            <div class="success-message">
+                <i class="fas fa-check-circle"></i> ✅ Your vendor account is approved!<br>
+                <small>You can now add and manage products.</small>
+            </div>
+        `;
+    } else {
+        document.getElementById('productFormSection').style.display = 'none';
+        document.getElementById('vendorStatusMessage').innerHTML = `
+            <div class="warning-message">
+                <i class="fas fa-clock"></i> ⏳ Your vendor account is pending approval.<br>
+                <small>Please wait for admin to approve your company before adding products.</small>
+            </div>
+        `;
+    }
+    
+    // Load vendor's products
+    fetch(`/admin/vendors/${vendorId}/products`)
+        .then(res => res.json())
+        .then(data => {
+            const myProducts = data.products || [];
+            
+            // Update total products in stats
+            document.getElementById('vendorStats').innerHTML = `
+                <div class="stat-card vendor-info">
+                    <h3>Vendor Name</h3>
+                    <div class="stat-number vendor-name-large">${vendorName}</div>
+                </div>
+                <div class="stat-card vendor-status">
+                    <h3>Status</h3>
+                    <div class="stat-number ${isApproved ? 'status-approved-color' : 'status-pending-color'}">
+                        ${isApproved ? 'Approved ✓' : 'Pending'}
+                    </div>
+                </div>
+                <div class="stat-card vendor-products">
+                    <h3>Total Products</h3>
+                    <div class="stat-number">${myProducts.length}</div>
+                </div>
+            `;
+            
+            // Display products
+            if (myProducts.length === 0) {
+                document.getElementById('products').innerHTML = `
+                    <li class="empty-state">
+                        <i class="fas fa-box-open"></i>
+                        <strong>No products yet</strong><br>
+                        <small>Add your first product using the form above</small>
+                    </li>
+                `;
+            } else {
+                document.getElementById('products').innerHTML = myProducts.map(p => `
+                    <li>
+                        <div>
+                            <strong>${p.name}</strong><br>
+                            <span>Price: ₹${p.price}</span><br>
+                            <span class="status-badge status-approved">
+                                Available for Sale ✓
+                            </span>
+                        </div>
+                        <div class="button-group">
+                            <button class="delete-btn" onclick="deleteProduct(${p.id}, '${p.name}')">
+                                <i class="fas fa-trash"></i> Delete
+                            </button>
+                        </div>
+                    </li>
+                `).join('');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading products:', error);
+            document.getElementById('products').innerHTML = `
+                <li class="error-state">
+                    <i class="fas fa-exclamation-circle"></i> Error loading products
+                </li>
+            `;
+        });
+}
+
+// Load earnings
+function loadMyEarnings() {
+    if (!currentVendorId) {
+        alert('Please check vendor status first');
+        return;
+    }
+    
+    fetch(`/vendor/earnings/${currentVendorId}`)
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById('earningsSection').style.display = 'block';
+            
+            document.getElementById('earningsStats').innerHTML = `
+                <div class="stat-card sales">
+                    <h3>Total Sales</h3>
+                    <div class="stat-number">₹${data.total_sales}</div>
+                </div>
+                <div class="stat-card commission">
+                    <h3>Commission Paid</h3>
+                    <div class="stat-number">₹${data.total_commission}</div>
+                </div>
+                <div class="stat-card earnings">
+                    <h3>Net Earnings</h3>
+                    <div class="stat-number">₹${data.total_earnings}</div>
+                </div>
+            `;
+            
+            if (data.orders.length === 0) {
+                document.getElementById('earningsHistory').innerHTML = `
+                    <li class="empty-state">
+                        <i class="fas fa-receipt"></i>
+                        No orders yet
+                    </li>
+                `;
+            } else {
+                document.getElementById('earningsHistory').innerHTML = data.orders.map(o => `
+                    <li>
+                        <div>
+                            <strong>${o.product_name}</strong><br>
+                            <span>Order #${o.id} | Date: ${o.order_date}</span><br>
+                            <span>Price: ₹${o.price} | Commission: ₹${o.commission}</span><br>
+                            <span><strong>You Receive: ₹${o.vendor_earnings}</strong></span>
+                        </div>
+                        <span class="status-badge ${o.settlement_status === 'paid' ? 'status-paid' : 'status-pending'}">
+                            ${o.settlement_status === 'paid' ? 'Paid ✓' : 'Pending'}
+                        </span>
+                    </li>
+                `).join('');
+            }
+        });
+}
+
+function registerVendor() {
+    const name = document.getElementById('vendorName').value;
+    if (!name) {
+        alert('Please enter vendor name');
+        return;
+    }
+    
+    fetch('/vendor/register', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: name})
+    })
+    .then(res => res.json())
+    .then(data => {
+        const statusDiv = document.getElementById('registrationStatus');
+        statusDiv.innerHTML = `
+            <div class="success-message">
+                <i class="fas fa-check-circle"></i> ✅ ${data.message}<br>
+                <strong>Your Vendor ID: ${data.vendor_id}</strong><br>
+                <small>Save this ID. You will need it to access your vendor account.</small>
+            </div>
+        `;
+        document.getElementById('vendorName').value = '';
+        document.getElementById('vendorId').value = data.vendor_id;
+    })
+    .catch(error => {
+        document.getElementById('registrationStatus').innerHTML = `
+            <div class="error-message">
+                <i class="fas fa-exclamation-circle"></i> Registration failed. Please try again.
+            </div>
+        `;
+    });
+}
+
+function checkVendorStatus() {
+    const vendorId = document.getElementById('vendorId').value;
+    if (!vendorId) {
+        alert('Please enter your Vendor ID');
+        return;
+    }
+    
+    fetch('/admin/vendors')
+        .then(res => res.json())
+        .then(vendors => {
+            const vendor = vendors.find(v => v.id == vendorId);
+            
+            if (!vendor) {
+                showRegistrationSection();
+                hideVendorSections();
+                showInitialButtons();
+                
+                document.getElementById('vendorStatusMessage').innerHTML = `
+                    <div class="error-message">
+                        <i class="fas fa-exclamation-circle"></i> Vendor ID not found.<br>
+                        <small>Please check your Vendor ID or register as a new vendor.</small>
+                    </div>
+                `;
+                currentVendorId = null;
+                currentVendorName = null;
+                currentVendorApproved = false;
+                return;
+            }
+            
+            currentVendorId = vendorId;
+            currentVendorName = vendor.name;
+            currentVendorApproved = vendor.approved;
+            
+            loadVendorStats(vendorId, vendor.name, vendor.approved);
+            loadMyEarnings();
+        })
+        .catch(error => {
+            console.error('Error checking vendor status:', error);
+            showRegistrationSection();
+            hideVendorSections();
+            showInitialButtons();
+            document.getElementById('vendorStatusMessage').innerHTML = `
+                <div class="error-message">
+                    <i class="fas fa-exclamation-circle"></i> Error checking vendor status.<br>
+                    <small>Please try again.</small>
+                </div>
+            `;
+        });
+}
+
+function addProduct() {
+    if (!currentVendorId) {
+        alert('Please check your vendor status first');
+        return;
+    }
+    
+    if (!currentVendorApproved) {
+        alert('Your company is not approved yet. Please wait for admin approval.');
+        return;
+    }
+    
+    const name = document.getElementById('productName').value;
+    const price = document.getElementById('price').value;
+    
+    if (!name || !price) {
+        alert('Please fill all product details');
+        return;
+    }
+    
+    if (price <= 0) {
+        alert('Please enter a valid price');
+        return;
+    }
+    
+    fetch('/vendor/add_product', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            vendor_id: parseInt(currentVendorId),
+            name: name,
+            price: parseInt(price)
+        })
+    })
+    .then(res => {
+        if (!res.ok) {
+            return res.json().then(data => {
+                throw new Error(data.error || 'Failed to add product');
+            });
+        }
+        return res.json();
+    })
+    .then(data => {
+        alert(`✅ ${data.message}`);
+        document.getElementById('productName').value = '';
+        document.getElementById('price').value = '';
+        
+        loadVendorStats(currentVendorId, currentVendorName, currentVendorApproved);
+    })
+    .catch(error => {
+        alert(`❌ Error: ${error.message}`);
+    });
+}
+
+function deleteProduct(id, name) {
+    if (!confirm(`Are you sure you want to delete product "${name}"?`)) return;
+    
+    fetch(`/vendor/delete_product/${id}`, {
+        method: 'DELETE'
+    })
+    .then(res => res.json())
+    .then(data => {
+        alert(`✅ ${data.message}`);
+        loadVendorStats(currentVendorId, currentVendorName, currentVendorApproved);
+    })
+    .catch(error => {
+        alert(`❌ Error: ${error.message}`);
+    });
+}
+
+function resetVendorPage() {
+    document.getElementById('vendorName').value = '';
+    document.getElementById('vendorId').value = '';
+    document.getElementById('productName').value = '';
+    document.getElementById('price').value = '';
+    
+    document.getElementById('registrationStatus').innerHTML = '';
+    document.getElementById('vendorStatusMessage').innerHTML = '';
+    
+    showRegistrationSection();
+    
+    hideVendorSections();
+    showInitialButtons();
+    
+    document.getElementById('products').innerHTML = '';
+    document.getElementById('earningsHistory').innerHTML = '';
+    
+    currentVendorId = null;
+    currentVendorName = null;
+    currentVendorApproved = false;
+    
+    window.scrollTo(0, 0);
+}
+
+// Initialize
+hideVendorSections();
+showInitialButtons();
+</script>
+</body>
+</html>

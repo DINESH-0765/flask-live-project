@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Marketplace Store</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+<div class="container">
+    <h2><i class="fas fa-shopping-cart"></i> Marketplace Store</h2>
+    
+    <div class="refresh-section">
+        <button id="refreshBtn" onclick="loadProducts()">
+            <i class="fas fa-sync-alt"></i> Refresh Products
+        </button>
+    </div>
+    
+    <h3><i class="fas fa-store"></i> Available Products</h3>
+    <div id="products-grid" class="products-grid">
+        <div class="loading-state">
+            <i class="fas fa-spinner fa-spin"></i>
+            <h3>Loading products...</h3>
+        </div>
+    </div>
+    
+    <div id="orderSummary" class="order-summary">
+        <h3><i class="fas fa-receipt"></i> Order Summary</h3>
+        <div class="summary-container">
+            <div id="summaryContent"></div>
+        </div>
+    </div>
+    
+    <div class="back-section">
+        <a href="/" class="back-btn">
+            <i class="fas fa-sign-out-alt"></i> Back to Login
+        </a>
+    </div>
+</div>
+
+<script>
+// Add loading state to button
+function setLoading(isLoading) {
+    const btn = document.getElementById('refreshBtn');
+    if (isLoading) {
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+        btn.disabled = true;
+    } else {
+        btn.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh Products';
+        btn.disabled = false;
+    }
+}
+
+function loadProducts() {
+    console.log('Loading products...');
+    
+    // Show loading state
+    setLoading(true);
+    
+    // Show loading message in products grid
+    document.getElementById('products-grid').innerHTML = `
+        <div class="loading-state">
+            <i class="fas fa-spinner fa-spin"></i>
+            <h3>Loading products...</h3>
+        </div>
+    `;
+    
+    fetch('/products')
+        .then(res => {
+            console.log('Response status:', res.status);
+            if (!res.ok) {
+                throw new Error(`HTTP error! Status: ${res.status}`);
+            }
+            return res.json();
+        })
+        .then(products => {
+            console.log('Products received:', products);
+            
+            if (products.length === 0) {
+                document.getElementById('products-grid').innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-box-open"></i>
+                        <h3>No products available</h3>
+                        <p>Check back later for new products.</p>
+                    </div>
+                `;
+                setLoading(false);
+                return;
+            }
+            
+            document.getElementById('products-grid').innerHTML = products.map(p => `
+                <div class="product-card">
+                    <div class="product-icon">
+                        <i class="fas fa-box"></i>
+                    </div>
+                    <h4>${p.name}</h4>
+                    <div class="vendor-name">
+                        <i class="fas fa-store"></i> ${p.vendor_name}
+                    </div>
+                    <div class="product-footer">
+                        <div class="product-price">
+                            <div class="price">₹${p.price}</div>
+                        </div>
+                        <button class="buy-btn" onclick='order("${p.name}", ${p.price}, "${p.id}", ${p.vendor_id})'>
+                            <i class="fas fa-shopping-cart"></i> Buy Now
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+            
+            setLoading(false);
+        })
+        .catch(error => {
+            console.error('Error loading products:', error);
+            document.getElementById('products-grid').innerHTML = `
+                <div class="error-state">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <h3>Error loading products</h3>
+                    <p>${error.message}</p>
+                    <p>Please check your connection and try again.</p>
+                </div>
+            `;
+            setLoading(false);
+        });
+}
+
+function order(name, price, id, vendorId) {
+    if (!confirm(`Purchase ${name} for ₹${price}?`)) {
+        return;
+    }
+    
+    console.log('Ordering:', {name, price, id, vendorId});
+    
+    fetch('/order', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            name: name, 
+            price: price,
+            product_id: id,
+            vendor_id: vendorId
+        })
+    })
+    .then(res => {
+        if (!res.ok) {
+            throw new Error(`Order failed with status: ${res.status}`);
+        }
+        return res.json();
+    })
+    .then(data => {
+        console.log('Order response:', data);
+        document.getElementById('orderSummary').style.display = 'block';
+        document.getElementById('summaryContent').innerHTML = `
+            <div class="summary-grid">
+                <div>
+                    <h4>Product Details</h4>
+                    <p><strong>Product:</strong> ${name}</p>
+                    <p><strong>Price:</strong> ₹${price}</p>
+                </div>
+                <div>
+                    <h4>Payment Summary</h4>
+                    <p><strong>Total Paid:</strong> ₹${price}</p>
+                </div>
+            </div>
+            <div class="success-message">
+                <i class="fas fa-check-circle"></i> ${data.message || 'Order placed successfully!'}
+            </div>
+        `;
+        
+        document.getElementById('orderSummary').scrollIntoView({behavior: 'smooth'});
+        
+        // Reload products after a short delay
+        setTimeout(loadProducts, 1000);
+    })
+    .catch(error => {
+        console.error('Order error:', error);
+        alert(`Order failed: ${error.message}`);
+    });
+}
+
+// Initial load when page opens
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Page loaded, fetching products...');
+    loadProducts();
+});
+
+// Also allow manual refresh with F5 key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'F5') {
+        e.preventDefault();
+        loadProducts();
+    }
+});
+</script>
+</body>
+</html>
