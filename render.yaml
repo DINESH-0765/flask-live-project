@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: flask-app
+    name: flask-sqlalchemy-app
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app
